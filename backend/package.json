@@ -4,8 +4,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
-    "build": "echo 'Skipping cloud build compilation step'",
-    "start": "npx ts-node src/server.ts"
+    "build": "npx tsc",
+    "start": "node ./node_modules/ts-node/dist/bin.js src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
