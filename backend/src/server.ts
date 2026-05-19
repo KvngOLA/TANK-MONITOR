@@ -77,5 +77,7 @@ app.post("/command", express.json(), (req, res) => {
 
 // Explicitly cast PORT to a number, and bind to '0.0.0.0'
 httpServer.listen(Number(PORT), "0.0.0.0", () => {
-  console.log(`🚀 Server listening on all interfaces at port ${PORT}`);
+  console.log(
+    `🚀 Production Server listening on all interfaces at port ${PORT}`,
+  );
 });
