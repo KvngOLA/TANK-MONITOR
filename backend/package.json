@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts",
-    "build": "npx tsc",
-    "start": "node dist/server.js"
+    "dev": "ts-node src/server.ts",
+    "build": "echo 'Skipping cloud build compilation step'",
+    "start": "npx ts-node src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
@@ -16,13 +16,13 @@
     "mqtt": "^5.15.1",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3",
+    "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.0",
     "@types/pg": "^8.20.0",
-    "@types/socket.io": "^3.0.1",
-    "ts-node-dev": "^2.0.0"
+    "@types/socket.io": "^3.0.1"
   }
 }
