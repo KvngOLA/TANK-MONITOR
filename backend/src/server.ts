@@ -29,8 +29,6 @@ app.get("/usage", async (req, res) => {
 });
 
 app.post("/command", express.json(), (req, res) => {
-  console.log("📥 Raw Request Body received:", req.body);
-
   // 1. Safe extraction and normalization to UPPERCASE
   const rawState = req.body.state;
   const state =
@@ -38,7 +36,6 @@ app.post("/command", express.json(), (req, res) => {
 
   // 2. Now 'ON' or 'OFF' will pass through flawlessly
   if (!["ON", "OFF"].includes(state)) {
-    console.warn(`⚠️ Rejecting invalid state string: "${rawState}"`);
     return res.status(400).json({ error: "Invalid state" });
   }
 
@@ -47,10 +44,6 @@ app.post("/command", express.json(), (req, res) => {
 
   // 3. Temporarily bypass strict connection blocks if testing in a crunch
   try {
-    console.log(
-      `📤 Attempting to publish "${state}" to HiveMQ topic: ${process.env.MQTT_TOPIC_COMMAND}`,
-    );
-
     if (client && client.connected) {
       client.publish(
         process.env.MQTT_TOPIC_COMMAND!,
@@ -63,9 +56,7 @@ app.post("/command", express.json(), (req, res) => {
               .status(500)
               .json({ error: "Failed to send command to hardware" });
           }
-          console.log(
-            `✅ Command "${state}" successfully accepted by HiveMQ broker.`,
-          );
+          console.log(`✅ Command "${state}" successfully sent.`);
           io.emit("command-published", { status: "acknowledged", state });
           return res.json({ status: "sent", state });
         },
@@ -86,5 +77,7 @@ app.post("/command", express.json(), (req, res) => {
 
 // Explicitly cast PORT to a number, and bind to '0.0.0.0'
 httpServer.listen(Number(PORT), "0.0.0.0", () => {
-  console.log(`🚀 Server listening on all interfaces at port ${PORT}`);
+  console.log(
+    `🚀 Production Server listening on all interfaces at port ${PORT}`,
+  );
 });
