@@ -6,74 +6,255 @@ import '../providers/usage_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/tank_painter.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  bool _pumpOn = false;
+  bool _loading = false;
+  late final AnimationController _waveController;
+  double _wavePhase = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))
+      ..addListener(() {
+        setState(() {
+          _wavePhase = _waveController.value * 2 * 3.1415926;
+        });
+      })
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    super.dispose();
+  }
+
+  /// Custom floating Material 3 style notification system that presents at the top
+  void showTopNotification({required String message, bool isError = false}) {
+    // 1. Instantly clear out any legacy active bars to prevent queue lag
+    ScaffoldMessenger.of(context).clearSnackBars();
+
+    // 2. Configure and trigger the custom top-floating banner layout
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: isError ? Colors.red[900] : Colors.green[900],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError ? Colors.red[900] : Colors.green[900],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(milliseconds: 1500), // Speeds up dismissal to 1.5s
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isError ? Colors.red[50] : Colors.green[50],
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        // This math overrides the positioning, pushing it exactly to the top view fold
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 160,
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _togglePump() async {
+    setState(() => _loading = true);
+    try {
+      final command = _pumpOn ? 'off' : 'on';
+      await ApiService.sendPumpCommand(command);
+      setState(() => _pumpOn = !_pumpOn);
+      
+      // ✅ SUCCESS STATE: Displays clean top banner update instantly
+      showTopNotification(message: 'Pump turned ${_pumpOn ? 'ON' : 'OFF'}');
+    } catch (e) {
+      // ❌ ERROR STATE: Displays red warning banner update instantly
+      showTopNotification(message: 'Error: $e', isError: true);
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final telemetryProvider = Provider.of<TelemetryProvider>(context);
+    final telemetry = Provider.of<TelemetryProvider>(context).current;
     final usageProvider = Provider.of<UsageProvider>(context);
-    final telemetry = telemetryProvider.current;
     final levelPercent = telemetry?.level ?? 0.0;
     final ph = telemetry?.ph ?? 0.0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tank Monitor')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      appBar: AppBar(
+        title: const Text('Tank Monitor'),
+        backgroundColor: const Color(0xFFFBFDFB),
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFFBFDFB),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Tank illustration
-            SizedBox(
-              height: 200,
-              width: 120,
-              child: CustomPaint(
-                painter: TankPainter(level: levelPercent / 100),
-                child: Center(
-                  child: Text('${levelPercent.toStringAsFixed(1)}%'),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text('PH: ${ph.toStringAsFixed(2)}'),
-            const Divider(height: 32),
-            // Usage chart placeholder
-            const Text('Water Usage (last 24h)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Expanded(
-              child: usageProvider.entries.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : LineChart(_buildLineChart(usageProvider.entries)),
-            ),
-            const Divider(height: 32),
-            // Pump control buttons
+            // Upper Dashboard Section
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await ApiService.sendPumpCommand('on');
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pump turned ON')));
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                    }
-                  },
-                  child: const Text('Pump ON'),
+                // LEFT SIDE: Tank Card
+                Expanded(
+                  flex: 6,
+                  child: Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    elevation: 6,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: AspectRatio(
+                        aspectRatio: 0.65,
+                        child: CustomPaint(
+                          painter: TankPainter(level: levelPercent / 100, wavePhase: _wavePhase),
+                          child: Center(
+                            child: Text(
+                              '${levelPercent.toStringAsFixed(1)}%',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 20),
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await ApiService.sendPumpCommand('off');
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pump turned OFF')));
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                    }
-                  },
-                  child: const Text('Pump OFF'),
+                const SizedBox(width: 12),
+                // RIGHT SIDE: Controls Column
+                Expanded(
+                  flex: 4,
+                  child: Column(
+                    children: [
+                      // Neumorphic Power Button
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _loading ? null : _togglePump,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: _pumpOn
+                                    ? const LinearGradient(
+                                        colors: [Color(0xFF64C7A4), Color(0xFF009688)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      )
+                                    : const LinearGradient(
+                                        colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _pumpOn ? Colors.greenAccent.withOpacity(0.6) : Colors.grey.withOpacity(0.4),
+                                    spreadRadius: 4,
+                                    blurRadius: 12,
+                                  ),
+                                ],
+                                border: Border.all(
+                                  color: _pumpOn ? Colors.green[600]! : Colors.grey,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(Icons.power_settings_new,
+                                  color: _pumpOn ? Colors.white : Colors.grey[700],
+                                  size: 40,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_loading)
+                            const SizedBox(
+                              width: 60,
+                              height: 60,
+                              child: CircularProgressIndicator(strokeWidth: 3),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // pH Metric Card
+                      Card(
+                        color: Colors.green[50],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Text('PH: ${ph.toStringAsFixed(2)}',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Pump Status Indicator Card
+                      Card(
+                        color: const Color(0xFFE8F5E9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              Icon(Icons.circle,
+                                color: _pumpOn ? Colors.green : Colors.red,
+                                size: 12,
+                                  ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('Pump Status: ${_pumpOn ? 'ACTIVE' : 'INACTIVE'}',
+                                  style: const TextStyle(fontSize: 16, color: Color(0xFF1B5E20)),
+                                  softWrap: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
+            ),
+            const SizedBox(height: 24),
+            // Lower Dashboard Section
+            const Text('Water Usage (last 24h)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 4,
+              child: SizedBox(
+                height: 250,
+                child: usageProvider.entries.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : LineChart(_buildLineChart(usageProvider.entries)),
+              ),
             ),
           ],
         ),
@@ -82,7 +263,6 @@ class HomeScreen extends StatelessWidget {
   }
 
   LineChartData _buildLineChart(List<dynamic> entries) {
-    // Convert entries to FlSpot list (assuming entries are UsageEntry objects)
     final spots = entries
         .asMap()
         .entries
@@ -94,12 +274,12 @@ class HomeScreen extends StatelessWidget {
           spots: spots,
           isCurved: true,
           barWidth: 2,
-          color: Colors.blueAccent,
+          color: Colors.green[600],
         ),
       ],
-      titlesData: FlTitlesData(show: false),
+      titlesData: const FlTitlesData(show: false),
       borderData: FlBorderData(show: false),
-      gridData: FlGridData(show: false),
+      gridData: const FlGridData(show: false),
     );
   }
 }
