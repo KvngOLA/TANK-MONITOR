@@ -20,7 +20,11 @@ class TankMonitorApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Tank Monitor',
-        theme: ThemeData(primarySwatch: Colors.blue),
+        theme: ThemeData(
+          scaffoldBackgroundColor: Colors.white,
+          primarySwatch: Colors.green,
+          canvasColor: Colors.white,
+        ),
         home: const HomeScreen(),
       ),
     );

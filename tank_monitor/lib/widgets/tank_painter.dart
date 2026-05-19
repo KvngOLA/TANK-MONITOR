@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 class TankPainter extends CustomPainter {
   final double level; // 0.0 - 1.0
+  final double wavePhase; // animation phase
 
-  TankPainter({required this.level});
-
+  TankPainter({required this.level, required this.wavePhase});
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
