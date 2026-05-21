@@ -9,10 +9,10 @@ const char* WIFI_SSID = "YOUR_SSID";
 const char* WIFI_PASS = "YOUR_PASSWORD";
 
 // MQTT broker configuration – HiveMQ Cloud
-const char* MQTT_BROKER   = "YOUR_HIVEMQ_HOST"; // e.g., broker.hivemq.com or your cloud host
-const int   MQTT_PORT     = 1883;
-const char* MQTT_USER     = "YOUR_MQTT_USERNAME";
-const char* MQTT_PASSWORD = "YOUR_MQTT_PASSWORD";
+const char* MQTT_BROKER   = "7ff454f846764c1aa4d60c7862a3c072.s1.eu.hivemq.cloud";
+const int   MQTT_PORT     = 8883;
+const char* MQTT_USER     = "Olaoluwa";
+const char* MQTT_PASSWORD = "skul_crusheR1"; // <-- Fixed: Added missing semicolon
 
 // MQTT topics
 const char* TOPIC_TELEMETRY = "tank/data";   // publish telemetry JSON
@@ -63,7 +63,6 @@ void setupWiFi() {
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  // Expect simple payload: "ON" or "OFF"
   String msg;
   for (unsigned int i = 0; i < length; ++i) {
     msg += (char)payload[i];
@@ -73,7 +72,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.println(msg);
 
   if (msg.equalsIgnoreCase("ON")) {
-    pumpOn = true; // command tries to turn pump on
+    pumpOn = true; 
   } else if (msg.equalsIgnoreCase("OFF")) {
     pumpOn = false;
   }
@@ -136,30 +135,23 @@ float readDistance() {
 
 float distanceToPercent(float dist) {
   if (dist < 0) return -1.0;
-  // Map distance to water level percentage (0 % = empty, 100 % = full)
-  float pct = (dist - FULL_DISTANCE) / (EMPTY_DISTANCE - FULL_DISTANCE) * 100.0;
+  float pct = (EMPTY_DISTANCE - dist) / (EMPTY_DISTANCE - FULL_DISTANCE) * 100.0;
   return constrain(pct, 0.0, 100.0);
 }
 
 float readPH() {
   int raw = analogRead(PH_PIN);
-  // Simulated pH 0‑14 via potentiometer
   return map(raw, 0, 4095, 0, 140) / 10.0;
 }
 
 // -------------------- Control logic --------------------
 void controlPump(float levelPct) {
-  // Original threshold logic
   if (!pumpOn && levelPct >= 0 && levelPct < LOW_LEVEL_PCT) {
     pumpOn = true;
   }
   if (pumpOn && levelPct >= HIGH_LEVEL_PCT) {
     pumpOn = false;
   }
-
-  // Safety auto‑shutdown when tank is empty or full
-  // Use distance cm values derived from levelPct if needed
-  // Here we rely on handleAlarm to enforce shutdown via alarmActive flag if required
 }
 
 void updatePumpOutput() {
@@ -176,8 +168,12 @@ void handleAlarm(float levelPct, float ph) {
     delay(150);
     digitalWrite(BUZZER_PIN, LOW);
     alarmActive = true;
-    // Auto‑shutdown pump in unsafe conditions
-    pumpOn = false;
+    
+    // Fixed Auto-shutdown: Only shut down if it is an OVERFLOW or unsafe pH.
+    // If it's critically low, we NEED the pump to turn on, not shut off!
+    if (levelPct > 95.0 || ph < PH_LOW || ph > PH_HIGH) {
+      pumpOn = false;
+    }
   } else {
     alarmActive = false;
   }
@@ -213,13 +209,18 @@ void updateLCD(float levelPct, float ph) {
 }
 
 // -------------------- Telemetry --------------------
-void publishTelemetry(float levelCm, float ph) {
-  // Build a compact JSON payload
+// Fixed: Expanded to send mapped percentage and string status for the UI toggle
+void publishTelemetry(float levelCm, float levelPct, float ph) {
+  String pumpStatusString = pumpOn ? "ACTIVE" : "INACTIVE";
+  
   String payload = "{";
   payload += "\"level\":" + String(levelCm, 2);
+  payload += ",\"level_pct\":" + String(levelPct, 2);
   payload += ",\"ph\":" + String(ph, 2);
-  payload += ",\"ts\":" + String(millis()); // simple timestamp in ms since boot
+  payload += ",\"pump_status\":\"" + pumpStatusString + "\"";
+  payload += ",\"ts\":" + String(millis());
   payload += "}";
+  
   client.publish(TOPIC_TELEMETRY, payload.c_str());
   Serial.print("MQTT publish: ");
   Serial.println(payload);
@@ -229,11 +230,10 @@ void loop() {
   if (!client.connected()) {
     reconnectMQTT();
   }
-  client.loop(); // process inbound MQTT messages
+  client.loop(); 
 
   unsigned long now = millis();
 
-  // Sensor read & UI update (every 5 s)
   if (now - lastTelemetry >= TELEMETRY_INTERVAL) {
     lastTelemetry = now;
 
@@ -245,7 +245,9 @@ void loop() {
     updatePumpOutput();
     handleAlarm(levelPct, ph);
     updateLCD(levelPct, ph);
-    publishTelemetry(distance, ph);
+    
+    // Pass the calculated levelPct directly into telemetry
+    publishTelemetry(distance, levelPct, ph);
 
     // Serial debug output
     Serial.println("--- Telemetry ---");

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "107148877352",
+    "project_id": "tank-monitor-d1326",
+    "storage_bucket": "tank-monitor-d1326.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:107148877352:android:59754ead1fd7d8ef989f1d",
+        "android_client_info": {
+          "package_name": "com.example.tank_monitor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDIjXlF5EhS4RZAGwlFEat1Evx8sESE4A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
