@@ -4,10 +4,24 @@ import '../models/usage.dart';
 import '../models/telemetry.dart';
 
 class ApiService {
-  // static const String baseUrl = 'http://196.223.125.101:2026';
-  // static const String baseUrl = "http://192.168.137.1:2026";
+  //development
    static const String baseUrl = "https://tapering-flyer-unmasked.ngrok-free.dev";
-  // static const String baseUrl = 'http://10.0.2.2:2026';
+
+  //production
+  // static const String baseUrl = "https://tank-monitor-production-399d.up.railway.app";
+
+  // Fetch current pump status (on/off)
+  static Future<bool> fetchPumpStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/pump/status'));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      // Expecting {"state": "on"} or {"state": "off"}
+      final state = data['state']?.toString().toLowerCase();
+      return state == 'on' || state == 'true';
+    } else {
+      throw Exception('Failed to load pump status');
+    }
+  }
 
   // Fetch past usage data
   static Future<List<UsageEntry>> fetchUsage() async {
