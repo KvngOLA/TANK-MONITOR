@@ -206,12 +206,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 shape: BoxShape.circle,
                                 gradient: _pumpOn
                                     ? const LinearGradient(
-                                        colors: [Color(0xFFFF8A80), Color(0xFFD32F2F)], // red/orange for active
+                                        colors: [Color(0xFF64C7A4), Color(0xFF009688)],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       )
                                     : const LinearGradient(
-                                        colors: [Color(0xFF64C7A4), Color(0xFF009688)], // green for inactive
+                                        colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),

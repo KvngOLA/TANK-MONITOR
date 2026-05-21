@@ -5,10 +5,10 @@ import '../models/telemetry.dart';
 
 class ApiService {
   //development
-  //  static const String baseUrl = "https://tapering-flyer-unmasked.ngrok-free.dev";
+   static const String baseUrl = "https://tapering-flyer-unmasked.ngrok-free.dev";
 
   //production
-  static const String baseUrl = "https://tank-monitor-production-399d.up.railway.app";
+  // static const String baseUrl = "https://tank-monitor-production-399d.up.railway.app";
 
   // Fetch current pump status (on/off)
   static Future<bool> fetchPumpStatus() async {
