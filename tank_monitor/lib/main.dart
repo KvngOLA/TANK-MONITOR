@@ -8,23 +8,24 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/notification_service.dart';
 
+// Handle background Firebase notifications cleanly
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Initialize Flutter bindings & services
   await Firebase.initializeApp();
   await NotificationService.showNotification(message);
 }
 
 void main() async {
+  // Ensure framework services are bound before initialization async calls
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
   // Set up background message handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Initialize local notification plugin
+  // Initialize local notification plugin channels
   await NotificationService.init();
 
-  // Request permissions (iOS) and configure foreground handling
+  // Request permissions for Android 13+ / iOS devices
   FirebaseMessaging messaging = FirebaseMessaging.instance;
   NotificationSettings settings = await messaging.requestPermission(
     alert: true,
@@ -33,7 +34,7 @@ void main() async {
     sound: true,
   );
 
-  // Foreground message handling
+  // Foreground message handling (when app is wide open on screen)
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
     await NotificationService.showNotification(message);
   });
@@ -53,9 +54,11 @@ class TankMonitorApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Tank Monitor',
+        debugShowCheckedModeBanner: false, // Hides the debug banner for a cleaner look
         theme: ThemeData(
+          useMaterial3: true, // Upgrades UI components to sleek modern layouts
+          colorSchemeSeed: Colors.green,
           scaffoldBackgroundColor: Colors.white,
-          primarySwatch: Colors.green,
           canvasColor: Colors.white,
         ),
         home: const HomeScreen(),

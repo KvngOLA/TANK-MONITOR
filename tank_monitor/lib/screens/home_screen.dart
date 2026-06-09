@@ -17,10 +17,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   // Socket for real‑time updates
   late final IO.Socket _socket;
-  bool _pumpOn = false; // true = pump active // true = pump active
+  bool _pumpOn = false; // true = pump active
   bool _loading = false;
   late final AnimationController _waveController;
   double _wavePhase = 0.0;
+
+  // Local state variables to catch real-time socket streams instantly
+  double? _localLevel;
+  double? _localPh;
 
   @override
   void initState() {
@@ -32,8 +36,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       })
       ..repeat();
-    // Load current pump status from backend
+      
+    // Load data from backend layers
     _loadPumpStatus();
+    _loadChartData(); // <-- ADDED: Automatically populates graph on screen boot
     _setupSocket();
   }
 
@@ -43,23 +49,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _socket = IO.io("https://tank-monitor-production-399d.up.railway.app", <String, dynamic>{
       'transports': ['websocket'],
     });
-    // Telemetry updates (optional – you could forward to provider if needed)
+
+    // Listen to the "telemetry" channel and update the UI variables directly
     _socket.on('telemetry', (data) {
-      // No direct UI change needed here; telemetry is handled by TelemetryProvider
+      try {
+        if (data != null) {
+          setState(() {
+            _localLevel = double.parse((data['level_pct'] ?? data['level'] ?? 0.0).toString());
+            _localPh = double.parse((data['ph'] ?? 7.0).toString());
+          });
+        }
+      } catch (e) {
+        debugPrint("Error parsing real-time telemetry socket data: $e");
+      }
     });
-    // Command‑published event contains pump status
+
+    // FIXED: Adjusted payload mapping to scan for 'state' or 'pump_status' 
+    // to match your server.ts broadcast output exactly ("ON" / "OFF")
     _socket.on('command-published', (data) {
       try {
-        final status = data['pump_status'];
-        if (status != null) {
-          setState(() => _pumpOn = status == 'ACTIVE');
+        final state = data['state'] ?? data['pump_status'];
+        if (state != null) {
+          setState(() => _pumpOn = (state == 'ON' || state == 'ACTIVE'));
         }
       } catch (e) {
         // Silently ignore malformed payloads
       }
     });
+
     _socket.onError((error) {
-      // Optionally show a warning if socket errors occur
       showTopNotification(message: 'Socket error: $error', isError: true);
     });
   }
@@ -70,23 +88,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final status = await ApiService.fetchPumpStatus();
       setState(() => _pumpOn = status);
     } catch (e) {
-      // If we cannot get status, keep default and optionally show a warning
       showTopNotification(message: 'Failed to load pump status: $e', isError: true);
+    }
+  }
+
+  // ADDED: Pulls actual database telemetry data rows to render your line chart
+  Future<void> _loadChartData() async {
+    try {
+      final historicalData = await ApiService.fetchHistoricalData();
+      if (historicalData.isNotEmpty) {
+        final usageProvider = Provider.of<UsageProvider>(context, listen: false);
+        
+        List<UsageEntry> loadedEntries = historicalData.map((row) {
+          return UsageEntry(
+            level: double.parse((row['level_pct'] ?? row['level'] ?? 0.0).toString()),
+            time: row['createdAt'] != null 
+                ? DateTime.parse(row['createdAt'].toString())
+                : DateTime.fromMillisecondsSinceEpoch(row['ts'] ?? DateTime.now().millisecondsSinceEpoch),
+          );
+        }).toList();
+
+        usageProvider.setEntries(loadedEntries);
+      }
+    } catch (e) {
+      debugPrint("Error processing historical data overlay: $e");
     }
   }
 
   @override
   void dispose() {
     _waveController.dispose();
+    _socket.disconnect(); // Closes down socket connection cleanly
     super.dispose();
   }
 
   /// Custom floating Material 3 style notification system that presents at the top
   void showTopNotification({required String message, bool isError = false}) {
-    // 1. Instantly clear out any legacy active bars to prevent queue lag
     ScaffoldMessenger.of(context).clearSnackBars();
 
-    // 2. Configure and trigger the custom top-floating banner layout
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -107,14 +146,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
-        duration: const Duration(milliseconds: 1500), // Speeds up dismissal to 1.5s
+        duration: const Duration(milliseconds: 1500),
         behavior: SnackBarBehavior.floating,
         backgroundColor: isError ? Colors.red[50] : Colors.green[50],
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        // This math overrides the positioning, pushing it exactly to the top view fold
         margin: EdgeInsets.only(
           bottom: MediaQuery.of(context).size.height - 160,
           left: 16,
@@ -130,11 +168,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final command = _pumpOn ? 'off' : 'on';
       await ApiService.sendPumpCommand(command);
       setState(() => _pumpOn = !_pumpOn);
-      
-      // ✅ SUCCESS STATE: Displays clean top banner update instantly
       showTopNotification(message: 'Pump turned ${_pumpOn ? 'ON' : 'OFF'}');
     } catch (e) {
-      // ❌ ERROR STATE: Displays red warning banner update instantly
       showTopNotification(message: 'Error: $e', isError: true);
     } finally {
       setState(() => _loading = false);
@@ -145,8 +180,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final telemetry = Provider.of<TelemetryProvider>(context).current;
     final usageProvider = Provider.of<UsageProvider>(context);
-    final levelPercent = telemetry?.level ?? 0.0;
-    final ph = telemetry?.ph ?? 0.0;
+
+    // Prioritize live local socket variables; fall back to global provider if null
+    final levelPercent = _localLevel ?? telemetry?.level ?? 0.0;
+    final ph = _localPh ?? telemetry?.ph ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -228,23 +265,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 ),
                               ),
                               child: Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.power_settings_new,
-                                      color: _pumpOn ? Colors.white : Colors.grey[700],
-                                      size: 40,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _pumpOn ? 'Turn Off Pump' : 'Turn On Pump',
-                                      style: TextStyle(
-                                        color: _pumpOn ? Colors.white : Colors.grey[800],
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                                child: Icon(
+                                  Icons.power_settings_new,
+                                  color: _pumpOn ? Colors.white : Colors.grey[700],
+                                  size: 40,
                                 ),
                               ),
                             ),
@@ -283,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               Icon(Icons.circle,
                                 color: _pumpOn ? Colors.green : Colors.red,
                                 size: 12,
-                                  ),
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text('Pump Status: ${_pumpOn ? 'ACTIVE' : 'INACTIVE'}',

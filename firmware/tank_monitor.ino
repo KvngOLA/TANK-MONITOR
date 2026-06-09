@@ -5,8 +5,8 @@
 
 // ==================== Configuration ====================
 // Replace with your Wi‑Fi credentials
-const char* WIFI_SSID = "YOUR_SSID";
-const char* WIFI_PASS = "YOUR_PASSWORD";
+const char* WIFI_SSID = "RICHARD 8131";
+const char* WIFI_PASS = "1234567r";
 
 // MQTT broker configuration – HiveMQ Cloud
 const char* MQTT_BROKER   = "7ff454f846764c1aa4d60c7862a3c072.s1.eu.hivemq.cloud";
