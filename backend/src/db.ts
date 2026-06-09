@@ -25,18 +25,20 @@ export function initDb() {
 export async function saveTelemetry(data: {
   level: number;
   ph: number;
+  pump_status: "ACTIVE" | "INACTIVE";
   timestamp?: string;
 }) {
   if (!db) {
     throw new Error("DB not initialized");
   }
-  const { level, ph, timestamp } = data;
+  const { level, ph, timestamp, pump_status } = data;
 
   try {
     await db.transaction(async (tx) => {
       await tx.insert(schema.telemetry).values({
         level,
         ph: ph.toString(),
+        pump_status,
         created_at: timestamp ? new Date(timestamp) : new Date(),
       });
 

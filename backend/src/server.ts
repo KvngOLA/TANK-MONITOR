@@ -28,6 +28,21 @@ app.get("/usage", async (req, res) => {
   res.json(telemetryData);
 });
 
+// NEW: Add this endpoint so the phone app can read the current pump status
+app.get("/status", async (req, res) => {
+  try {
+    const telemetryData = await getAllTelemetry();
+    if (telemetryData && telemetryData.length > 0) {
+      // Grab the very last database entry (the most recent one)
+      const latest = telemetryData[telemetryData.length - 1];
+      return res.json({ status: latest.pump_status || "INACTIVE" });
+    }
+    return res.json({ status: "INACTIVE" }); // Fallback if DB is empty
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to read status" });
+  }
+});
+
 app.post("/command", express.json(), (req, res) => {
   // 1. Safe extraction and normalization to UPPERCASE
   const rawState = req.body.state;
