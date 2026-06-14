@@ -1,8 +1,10 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import dotenv from "dotenv";
+import { sql } from "drizzle-orm";
 // import * as schema from "@/schema"
 import { schema } from "./schema";
+import { telemetry } from "./schema";
 
 dotenv.config({ path: ".env" });
 
@@ -59,6 +61,35 @@ export async function getAllTelemetry() {
     throw new Error("DB not initialized");
   }
   return db.select().from(schema.telemetry);
+}
+
+export async function getAllChartTelemetry() {
+  if (!db) {
+    throw new Error("DB not initialized");
+  }
+
+  // Truncates the timestamp to the nearest hour (keeps date + hour intact)
+  // This ensures chronological sorting remains perfect across multiple days or midnights
+  return (
+    db
+      .select({
+        timeKey:
+          sql<string>`to_char(date_trunc('hour', ${telemetry.created_at}), 'YYYY-MM-DD HH24:00')`.as(
+            "time_key",
+          ),
+        averageLevel:
+          sql<number>`ROUND(AVG(${telemetry.level})::numeric, 1)`.as(
+            "average_level",
+          ),
+      })
+      .from(telemetry)
+      // Filter for only the last 24 hours of data
+      .where(sql`${telemetry.created_at} >= NOW() - INTERVAL '24 hours'`)
+      // Group rows accurately by date-hour blocks
+      .groupBy(sql`date_trunc('hour', ${telemetry.created_at})`)
+      // Order strictly chronologically from the oldest hour to the absolute newest
+      .orderBy(sql`date_trunc('hour', ${telemetry.created_at}) ASC`)
+  );
 }
 
 /** Simple helper to get the drizzle instance elsewhere */

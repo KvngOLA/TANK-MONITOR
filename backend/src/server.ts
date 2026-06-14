@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import dotenv from "dotenv";
 import { initMqtt } from "./mqttClient";
-import { getAllTelemetry, initDb } from "./db";
+import { getAllChartTelemetry, getAllTelemetry, initDb } from "./db";
 
 dotenv.config({ path: ".env" });
 
@@ -24,7 +24,7 @@ app.get("/", (req, res) => res.send("Water Manager Backend is running"));
 
 // get past telemetry data
 app.get("/usage", async (req, res) => {
-  const telemetryData = getAllTelemetry();
+  const telemetryData = getAllChartTelemetry();
   res.json(telemetryData);
 });
 
