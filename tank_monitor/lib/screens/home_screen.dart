@@ -38,16 +38,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ..repeat();
       
     // Load data from backend layers
-    _loadPumpStatus();
-    _loadChartData(); // <-- ADDED: Automatically populates graph on screen boot
+    _loadChartData(); // Automatically populates graph on screen boot
     _setupSocket();
   }
 
   // Initialize socket listeners for telemetry and command updates
   void _setupSocket() {
-    // Connect to the same backend used by SocketService
     _socket = IO.io("https://tank-monitor-production-399d.up.railway.app", <String, dynamic>{
       'transports': ['websocket'],
+    });
+
+    // FRESH-OPENING TRIGGER: Catches the current state immediately upon launching the app
+    _socket.on('pump-status', (data) {
+      try {
+        if (data != null && data['isPumpActive'] != null) {
+          setState(() {
+            _pumpOn = data['isPumpActive'] == true;
+          });
+        }
+      } catch (e) {
+        debugPrint("Error handling fresh startup pump status payload: $e");
+      }
     });
 
     // Listen to the "telemetry" channel and update the UI variables directly
@@ -64,16 +75,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     });
 
-    // FIXED: Adjusted payload mapping to scan for 'state' or 'pump_status' 
-    // to match your server.ts broadcast output exactly ("ON" / "OFF")
+    // REACTIVE FIX: Listens to server broadcast to safely flip button states
     _socket.on('command-published', (data) {
       try {
-        final state = data['state'] ?? data['pump_status'];
-        if (state != null) {
-          setState(() => _pumpOn = (state == 'ON' || state == 'ACTIVE'));
+        if (data != null && data['state'] != null) {
+          final String incomingState = data['state'].toString().trim().toUpperCase();
+          
+          setState(() {
+            _pumpOn = (incomingState == 'ON');
+          });
         }
       } catch (e) {
-        // Silently ignore malformed payloads
+        debugPrint("Socket status parse error: $e");
       }
     });
 
@@ -82,17 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  // Fetch pump status once on screen load
-  Future<void> _loadPumpStatus() async {
-    try {
-      final status = await ApiService.fetchPumpStatus();
-      setState(() => _pumpOn = status);
-    } catch (e) {
-      showTopNotification(message: 'Failed to load pump status: $e', isError: true);
-    }
-  }
-
-  // ADDED: Pulls actual database telemetry data rows to render your line chart
+  // Pulls actual database telemetry data rows to render your line chart
   Future<void> _loadChartData() async {
     try {
       final historicalData = await ApiService.fetchHistoricalData();
@@ -101,10 +104,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         
         List<UsageEntry> loadedEntries = historicalData.map((row) {
           return UsageEntry(
-            level: double.parse((row['level_pct'] ?? row['level'] ?? 0.0).toString()),
+            level: double.parse((row['averageLevel'] ?? 0.0).toString()),
             time: row['createdAt'] != null 
                 ? DateTime.parse(row['createdAt'].toString())
-                : DateTime.fromMillisecondsSinceEpoch(row['ts'] ?? DateTime.now().millisecondsSinceEpoch),
+                : DateTime.now(),
           );
         }).toList();
 
@@ -162,13 +165,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // DECOUPLED FIX: Handed state mutations completely off to the socket layer
   Future<void> _togglePump() async {
     setState(() => _loading = true);
     try {
-      final command = _pumpOn ? 'off' : 'on';
-      await ApiService.sendPumpCommand(command);
-      setState(() => _pumpOn = !_pumpOn);
-      showTopNotification(message: 'Pump turned ${_pumpOn ? 'ON' : 'OFF'}');
+      final String targetState = _pumpOn ? 'OFF' : 'ON';
+      _socket.emit('toggle-pump-request', targetState);
+      showTopNotification(message: 'Sending command: $targetState');
     } catch (e) {
       showTopNotification(message: 'Error: $e', isError: true);
     } finally {
@@ -357,6 +360,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           isCurved: true,
           barWidth: 2,
           color: Colors.green[600],
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(
+            show: true,
+            color: Colors.green[600]!.withOpacity(0.15),
+          ),
         ),
       ],
       titlesData: const FlTitlesData(show: false),
